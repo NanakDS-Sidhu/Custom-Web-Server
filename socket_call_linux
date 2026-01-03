@@ -1,0 +1,4 @@
+exec 3<>/dev/tcp/127.0.0.1/8888
+echo "NDS" >&3
+cat <&3
+exec 3>&-
