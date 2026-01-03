@@ -4,7 +4,7 @@ import socket
 s=socket.create_connection(("127.0.0.1",8888))
 
 #send a get request to the server
-s.sendall(b"GET / HTTP/1.1\r\nHOST:localhost\r\n\r\n")
+s.sendall(b"GET /hello HTTP/1.1\r\nHOST:localhost\r\n\r\n")
 
 #recieve upto 1024 bits of the response
 print(s.recv(1024).decode())
