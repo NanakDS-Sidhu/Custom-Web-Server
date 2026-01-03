@@ -1,6 +1,6 @@
 import asyncio
 import traceback
-from typing import Callable, Dict, Any, List, Tuple
+from typing import Callable, Dict, Any
 
 async def app(scope: Dict[str, Any], receive: Callable, send: Callable):
     try:
@@ -44,7 +44,6 @@ class HTTPServer:
         self.app = app
 
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
-        """Handles a persistent TCP connection."""
         while not writer.is_closing():
             try:
                 header_data = await reader.readuntil(b"\r\n\r\n")

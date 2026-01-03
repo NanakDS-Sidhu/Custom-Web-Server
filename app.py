@@ -13,6 +13,10 @@ async def echo(request):
     data = await request.body()
     return Response(f"You posted: {data.decode()}")
 
+@app.route("/hi", methods=["GET"])
+async def home(request):
+    return Response("<h1 style='background:blue;'>Welcome to page hi</h1>", headers={"content-type": "text/html"})
+
 async def main():
     server_logic = HTTPServer(app)
     server = await asyncio.start_server(server_logic.handle_client, "127.0.0.1", 8000)
