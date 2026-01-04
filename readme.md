@@ -1,7 +1,3 @@
-Here’s a **matching simple README**, same tone and style as the previous ones, but adjusted for a **pure HTTP-over-TCP server (no ASGI)**:
-
----
-
 # Minimal HTTP Server over TCP (Asyncio)
 
 ## Overview
