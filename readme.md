@@ -4,6 +4,37 @@ This project implements a custom asynchronous HTTP server built on top of asynci
 
 The goal is to understand how low-level socket handling, the asyncio event loop, and application-level routing fit together.
 
+
+This repository is organized into **multiple branches**, each implementing the server at a **different abstraction level**.
+Refer to the README in each branch to understand the functionality and design at that stage.
+
+### Branch Overview
+
+* **`TCP-calls`**
+  Raw TCP socket handling and echo-style communication.
+
+* **`HTTP-handler`**
+  Basic HTTP server built directly on top of TCP.
+
+* **`ASGI-GET`**
+  Minimal ASGI-style server supporting **GET requests only**.
+
+* **`ASGI-GET-POST`**
+  Extended ASGI-style server with **GET and POST support**.
+
+* **`ASGI-Custom-app`**
+  ASGI server executing a custom ASGI application.
+
+* **`ASGI-starlette-demo`**
+  Demo showing compatibility with a real ASGI framework (**Starlette**).
+
+* **`main`**
+  Full ASGI-compliant server implementation.
+
+---
+
+
+
 ### High-Level Request Lifecycle
 ```scss
 start_server()
