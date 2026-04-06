@@ -1,6 +1,7 @@
 import asyncio
 import traceback
 from typing import Callable, Dict, Any
+import fast_parser  
 
 async def app(scope: Dict[str, Any], receive: Callable, send: Callable):
     try:
@@ -46,46 +47,69 @@ class HTTPServer:
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         while not writer.is_closing():
             try:
+                # 1. READ PATH: Let asyncio handle the network I/O
                 header_data = await reader.readuntil(b"\r\n\r\n")
                 if not header_data:
                     break
                 
-                lines = header_data.decode().split("\r\n")
-                method, path, version = lines[0].split(" ")
+                raw_request_str = header_data.decode('utf-8', errors='ignore')
+                
+                # Hand off string parsing to C++
+                parsed = fast_parser.parse_http(raw_request_str)
                 
                 headers = []
                 content_length = 0
-                for line in lines[1:]:
-                    if ": " in line:
-                        k, v = line.split(": ", 1)
-                        headers.append((k.lower().encode(), v.encode()))
-                        if k.lower() == "content-length":
-                            content_length = int(v)
+                for k, v in parsed.headers.items():
+                    k_bytes = k.lower().encode('utf-8')
+                    v_bytes = v.encode('utf-8')
+                    headers.append((k_bytes, v_bytes))
+                    if k_bytes == b"content-length":
+                        content_length = int(v)
 
                 queue = asyncio.Queue()
 
                 async def receive():
                     return await queue.get()
 
+                # 2. WRITE PATH: State variables for building the response
+                response_status = 200
+                response_headers = []
+
                 async def send(message):
+                    nonlocal response_status, response_headers
+                    
                     if message["type"] == "http.response.start":
-                        status = message["status"]
-                        writer.write(f"HTTP/1.1 {status} OK\r\n".encode())
-                        for k, v in message.get("headers", []):
-                            writer.write(k + b": " + v + b"\r\n")
-                        writer.write(b"\r\n")
+                        response_status = message["status"]
+                        # Convert ASGI byte tuples to strings for the C++ serializer
+                        response_headers = [
+                            (k.decode('utf-8'), v.decode('utf-8')) 
+                            for k, v in message.get("headers", [])
+                        ]
+                        
                     elif message["type"] == "http.response.body":
-                        writer.write(message.get("body", b""))
+                        body_bytes = message.get("body", b"")
+                        
+                        # Hand off string serialization to C++
+                        raw_response = fast_parser.serialize_response(
+                            response_status, 
+                            response_headers, 
+                            body_bytes
+                        )
+                        
+                        writer.write(raw_response)
                         await writer.drain()
 
                 body_read = 0
-                request_body = await reader.readexactly(content_length)
+                request_body = b""
+                if content_length > 0:
+                    request_body = await reader.readexactly(content_length)
+                
                 await queue.put({"type": "http.request", "body": request_body, "more_body": False})
 
                 scope = {
                     "type": "http",
-                    "method": method,
-                    "path": path,
+                    "method": parsed.method,
+                    "path": parsed.path,
                     "headers": headers,
                 }
                 
@@ -101,11 +125,11 @@ class HTTPServer:
         await writer.wait_closed()
 
 async def main():
-    host="127.0.0.1"
-    port=8000
-    server_logic=HTTPServer(app)
-    server = await asyncio.start_server(server_logic.handle_client,host,port)
-    print(f"ASGI server running on  http://{host}:{port}")
+    host = "127.0.0.1"
+    port = 8000
+    server_logic = HTTPServer(app)
+    server = await asyncio.start_server(server_logic.handle_client, host, port)
+    print(f"Hybrid C++/Python ASGI server running on http://{host}:{port}")
     async with server:
         await server.serve_forever()
 
