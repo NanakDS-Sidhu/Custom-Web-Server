@@ -31,9 +31,10 @@ rejected_connections = 0
 metrics_lock = asyncio.Lock()
 
 class HTTPServer:
-    def __init__(self, app, max_connections=1000):
+    def __init__(self, app, max_connections=1000,buffer_size=65536):
         self.app = app
         self.connection_semaphore = asyncio.Semaphore(max_connections)
+        self.buffer_size = buffer_size
 
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         global active_connections, total_requests, rejected_connections
@@ -132,9 +133,23 @@ class HTTPServer:
                             )
                                 await writer.drain() # Crucial: ensure bytes are sent before closing
                                 return
-                            request_body = await reader.readexactly(content_length)
+                        async def stream_body(cl_len):
+                            bytes_read = 0
+                            while bytes_read < cl_len:
+                                chunk_size = min(self.buffer_size, cl_len - bytes_read)
+                                chunk = await reader.read(chunk_size)
+                                if not chunk:
+                                    break
+                                bytes_read += len(chunk)
+                                # If queue is full, this 'await' applies back-pressure to the socket
+                                await queue.put({
+                                    "type": "http.request",
+                                    "body": chunk,
+                                    "more_body": bytes_read < cl_len
+                                })
                             
-                        await queue.put({"type": "http.request", "body": request_body, "more_body": False})
+                            if cl_len == 0:
+                                await queue.put({"type": "http.request", "body": b"", "more_body": False})
                         
                         scope = {
                             "type": "http",
@@ -143,12 +158,15 @@ class HTTPServer:
                             "headers": headers,
                         }
 
-                        await self.app(scope, receive, send)
+                        _, _ = await asyncio.gather(
+                        self.app(scope, receive, send),
+                        stream_body(content_length)
+                        )
 
                     except asyncio.TimeoutError:
                         logger.debug(f"Header timeout for {addr}")
                         break
-                    except asyncio.IncompleteReadError:
+                    except (asyncio.IncompleteReadError,ConnectionResetError):
                         logger.debug(f"Incomplete Read for {addr}")
 
                         break
