@@ -200,3 +200,86 @@ The event loop controls execution flow via await boundaries
 
 This structure mirrors the internal architecture of production servers such as uvicorn, while remaining simple and educational.
 
+
+## Runtime & Reliability Enhancements
+The server was extended with several production-style runtime controls to improve stability under load and enable observability.
+
+### Connection Pooling
+A global concurrency limit was introduced using an asyncio.Semaphore to restrict the number of simultaneous active client handlers.
+
+#### Purpose:
+
+- Prevent unbounded task creation
+
+- Limit resource contention
+
+- Maintain predictable server performance
+
+Effect: New connections wait when capacity is reached instead of overwhelming the system.
+
+### Backpressure Control
+Incoming connections are regulated using a bounded request queue. If the queue reaches capacity, the server immediately responds with: HTTP 503 Service Unavailable.
+
+#### Purpose:
+
+- Prevent overload collapse
+
+- Maintain responsiveness during traffic spikes
+
+Effect: Excess traffic is rejected gracefully rather than causing server failure.
+
+### Bounded Request Buffering
+Request body reads are limited by a configurable maximum body size. If the request exceeds the configured limit, the server responds with: HTTP 413 Payload Too Large.
+
+#### Purpose:
+
+- Prevent memory exhaustion
+ 
+- Protect against large payload abuse
+
+Effect: Memory usage remains bounded regardless of client behavior.
+
+### Keep-Alive Connection Handling
+Connections remain open to allow multiple HTTP requests per TCP session.
+
+#### Purpose:
+
+- Reduce connection overhead
+
+- Improve throughput and latency
+
+Effect: Multiple requests are processed sequentially on the same socket.
+
+### Server Metrics & Observability
+Runtime counters were added to monitor server behavior.
+
+#### Tracked Metrics:
+
+- active_connections
+
+- total_requests
+
+- rejected_connections
+
+- uptime_seconds
+
+Exposed via: GET /metrics
+
+#### Purpose:
+
+Enable runtime visibility
+
+Support performance testing
+
+Aid debugging and reliability analysis
+
+Graceful Connection Lifecycle Management
+Connection open and close events update runtime counters and ensure proper resource cleanup.
+
+Purpose:
+
+Avoid resource leakage
+
+Maintain accurate runtime statistics
+
+Effect: Connections are tracked seamlessly throughout their entire lifecycle
